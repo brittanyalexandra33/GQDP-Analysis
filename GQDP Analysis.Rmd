@@ -1,0 +1,160 @@
+---
+title: "Quarterly GDP for Retail Trade in NZ"
+author: "Brittany Alexandra"
+date: \today
+fontsize: 11pt
+output:
+  bookdown::html_document2:
+    fig_height: 5
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(fpp3)
+library(kableExtra)
+```
+
+# Quarterly GDP for Retail Trade in New Zealand
+
+Gross domestic product (GDP) is a measure of the total value of goods and services produced in a country over a specific period of time. It provides a snapshot of a country's economic growth. The data set `qgdp_retail.csv` contains quarterly (chain volume) gross domestic product (QGDP) for the retail trade industry in New Zealand, measured in the prices from 2009/10 in NZD Millions. The data, courtesy of Statistics New Zealand, contains the actual time series as well as the seasonally-adjusted time series, measured from `1987Q2` until `2022Q4`.
+
+> 1.  `r text_spec("Time Series Analysis + Real-world casual factors", background = "blueviolet", color = "white")`
+
+```{r}
+gdp <- read_csv("qgdp_retail.csv")
+
+#Create yearquarter and coerce to tsibble
+gdp <- gdp %>%
+  mutate(Date = yearquarter(Date)) %>%
+  as_tsibble(index = Date)
+
+# Pivot table for plotting
+gdp.long <- gdp %>%
+  pivot_longer(cols = c("Actual", "Seasonally Adjusted"),
+               names_to = "Series",
+               values_to = "QGDP")
+
+# Produce plot
+ggplot(data = gdp.long,
+       mapping = aes(x = Date,
+                     y = QGDP,
+                     linetype = Series,
+                     colour = Series)) + 
+  geom_line() + 
+  scale_colour_brewer(palette = "Paired") + 
+    labs(y = "QGDP (Millions NZD)",
+       title = "Retail Trade Industry in New Zealand") +
+  theme_minimal()
+```
+
+QGDP for retail trade in New Zealand is generally increasing over time, with a nonlinear trend-cycle. The actual series exhibits multiplicative seasonality, where the magnitude of the seasonal fluctuations are varying with the level of the trend-cycle. The seasonally-adjusted series removes these seasonal fluctuations to better understand the quarter-to-quarter movements not explained by the seasons.
+
+We notice the impact of the 2008 global financial crisis on QGDP for retail trade, as the seasonally-adjusted figures show a marked turning-point and drop around 2008. This is referred to as an economic recession. We also notice the impact that the COVID-19 pandemic has on QGDP for retail trade. Both the actual, and the seasonally-adjusted series stop following their general pattern in 2020 and beyond. This is particularly in the second quarter of 2020, where there is a sharp drop in QGDP for retail trade. This is considered an outlier (or a shock to the economy), and should be part of the remainder component in a time series decomposition. From the plot, it is uncertain as to whether COVID-19 has a longer-term effect on the trend-cycle, but it certainly has led to an unusual seasonally-adjusted series from 2020 onwards. There is a small, but unusual peak in the actual and seasonally-adjusted series just before 1990, going against the usual seasonal pattern. Without the appropriate subject-matter-expertise, it is not obvious what real-world event may have led to this. There is also a smaller recession in the early-1990s.
+
+QGDP has been inflation-adjusted to ensure the dollar values between periods is comparable, allowing us to understand real changes over time.
+
+> 2.  `r text_spec("STL Decomposition features", background = "blueviolet", color = "white")`
+
+```{r}
+# Perform decomposition on the log of the actual data
+dcmp <- gdp %>%
+  model(stl = STL(log(Actual), robust = TRUE))
+
+# Plot the decomposition plot
+components(dcmp) %>%
+  autoplot()
+
+# Format the data set
+gdp.sadj <- gdp %>%
+  left_join(components(dcmp) %>% 
+            select(season_adjust), by = "Date") %>%
+  mutate(season_adjust = exp(season_adjust)) %>%
+  rename("Statistics NZ" = "Seasonally Adjusted",
+         STL = season_adjust) %>%
+  pivot_longer(cols = c("Statistics NZ", STL),
+               names_to = "Method",
+               values_to = "Sadj")
+
+# Plot the data
+ggplot(data = gdp.sadj,
+       mapping = aes(x = Date,
+                     y = Sadj,
+                     colour = Method,
+                     linetype = Method)) +
+  geom_line() +
+  scale_colour_brewer(palette = "Paired") + 
+  theme_minimal() + 
+    labs(y = "QGDP (Millions NZD)",
+       title = "Comparison of Seasonal-Adjustment Methods for QGDP in Retail Trade")
+```
+
+As the data exhibits multiplicative seasonality, a multiplicative model is required. This means we log transform the data before running the STL decomposition. It also means we need to exponentiate the components to back-transform to the original scale.
+
+As with the seasonally-adjusted series in the previous question, the trend-cycle component appears to have recessions in the early 1990s and again in 2008. There also appears to be a drop in the trend-cycle in the last few quarters of the series, indicating that we may currently be in an economic recession. The remainder component appears to have mopped up a lot of the effects from COVID-19, with large spikes in this component from 2020 onwards. There is also a noticeable spike in the remainder component before 1990.
+
+When comparing the two methods of seasonal-adjustment, we note that we are using an STL decomposition, which is an algorithm that uses a combination of moving-averages and loess smoothing to estimate the time series components, whereas Statistics New Zealand uses the X13-ARIMA-SEATS software, which is an entirely different algorithm, utilising additional time series modelling features.
+
+> 3.  `r text_spec("White noise within this data", background = "blueviolet", color = "white")`
+
+```{r}
+# Time plot
+components(dcmp) %>%
+  autoplot(remainder) + 
+  theme_minimal()
+
+# Correlogram
+components(dcmp) %>%
+  ACF(remainder) %>%
+  autoplot() + 
+  theme_minimal()
+
+# Ljung-Box test
+components(dcmp) %>%
+  features(remainder, features = ljung_box, lag = 8, dof = 0)
+```
+
+For a time series to be considered white noise, it must have zero mean, constant variance over time, and no autocorrelation.
+
+From the time plot, we see that the series has zero mean, but that the variance is not independent of time (i.e., there is a larger variance in the latter quarters). This indicates that the remainder series may not be consistent with white noise.
+
+Correlation is a measure of the strength and direction of a linear association between two variables. Autocorrelation measures the correlation of a time series with lagged versions of itself. We can see that there are some significant autocorrelation coefficients in the correlogram at lags 1 and 5, indicating that the remainder series may not be consistent with white noise.
+
+The Ljung-Box portmanteau test gives us a test statistic of 15.9 and p -value of 0.0442, giving us evidence to suggest that the remainder term is not consistent with white noise.
+
+> 4.  `r text_spec("Fitting benchmark forecast methods to estimate QGDP in the ratil trade industry ", background = "blueviolet", color = "white")`
+
+```{r}
+# Create your training set
+train <- gdp %>%
+  filter(Date <= yearquarter("2018Q4"))
+
+# Create the decomposition models with the forecast methods
+fit <- train %>%
+  model(Naive = decomposition_model(STL(log(Actual), robust = TRUE),
+                                 NAIVE(season_adjust)),
+        Drift = decomposition_model(STL(log(Actual), robust = TRUE),
+                            RW(season_adjust ~ drift())))
+
+# Forecast 4 years into the future
+fc <- fit %>%
+  forecast(h = "4 years")
+
+# Plot the data
+fc %>%
+  autoplot(gdp, level = NULL) + 
+  theme_minimal() + 
+  labs(y = "QGDP (Millions NZD)",
+       title = "Comparison of Forecast Methods for QGDP in Retail Trade")
+# Compute forecast accuracy measures
+accuracy(fc, gdp)
+```
+
+Neither method is particularly good at predicting the shocks to the actual series from 2020 onward, but the random walk with drift method follows the general trend better than the naive method, and tends to be closer to the truth apart from in the second quarter of 2020. We can see that because all of the forecast accuracy measures are smaller for the random walk with drift forecast model, then this is the better method. It is also important to consider that the seasonally-adjusted series for QGDP in the retail trade industry is trending upwards, so a forecast method that allows for a trend (i.e., the drift model) will tend to perform better than a forecast method that does not allow for this (i.e., the naive model).
