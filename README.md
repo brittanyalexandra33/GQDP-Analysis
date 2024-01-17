@@ -1,5 +1,7 @@
 # GQDP-Analysis
 
+Download the HTML to view the report :) 
+
 **Objective/Goal:**
 
 The objective of this project was to analyze the Quarterly GDP (QGDP) data for the retail trade industry in New Zealand using time series analysis techniques and forecast the future trends in the industry.
