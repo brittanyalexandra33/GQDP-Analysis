@@ -25,11 +25,6 @@ The project was implemented using R programming language and the RStudio softwar
 - Ljung-Box Portmanteau Test
 
 
-**Code:**
-
-The code for the project can be found at [insert link here].
-
-
 **Results:**
 
 The time series analysis of the QGDP data revealed that the actual and seasonally-adjusted series have a similar trend with a slight increase in the recent years. Two real-world events that could have affected these time series are the COVID-19 pandemic and the economic recession in 2008. The STL decomposition of the actual QGDP series showed a clear trend, seasonal, and remainder components. The seasonally-adjusted series produced by the STL decomposition was slightly different from the seasonally-adjusted series produced by Statistics New Zealand. The Ljung-Box Portmanteau Test showed that the remainder series was consistent with white noise. The forecast models showed that the Naive (NAIVE) benchmark method outperformed the Random Walk with Drift (RW) method in terms of forecast accuracy.
